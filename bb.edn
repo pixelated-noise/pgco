@@ -2,4 +2,6 @@
  :tasks {:requires   ([tasks])
          psql        (exec 'tasks/psql-prompt)
          copy        (exec 'tasks/copy)
+         eval        (exec 'tasks/psql-eval)
+         dump-schema (exec 'tasks/dump-schema)
          copy-schema (exec 'tasks/copy-schema)}}
