@@ -1,7 +1,10 @@
 {:paths ["."]
- :tasks {:requires   ([tasks])
-         psql        (exec 'tasks/psql-prompt)
-         copy        (exec 'tasks/copy)
-         eval        (exec 'tasks/psql-eval)
-         dump-schema (exec 'tasks/dump-schema)
-         copy-schema (exec 'tasks/copy-schema)}}
+ :tasks {:requires    ([tasks])
+         psql-prompt  (exec 'tasks/psql-prompt)
+         psql-command (exec 'tasks/psql-command*)
+         copy         (exec 'tasks/copy)
+         eval         (exec 'tasks/psql-eval)
+         dump         (exec 'tasks/dump)
+         dump-schema  (exec 'tasks/dump-schema)
+         copy-schema  (exec 'tasks/copy-schema)
+         copy-data    (exec 'tasks/copy-data)}}
