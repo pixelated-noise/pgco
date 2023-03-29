@@ -121,7 +121,7 @@
         c      (get-in config [:connections (keyword conn)])]
     (when-not c (log/fatalf "Connection %s not found" conn) (exit 1))
     (let [command (cond
-                    file    `["psql" ~@(format-conn c) "--file" ~file]
+                    file    `["psql" ~@(format-conn c) ~@(format-opts opts) "--file" ~file]
                     command `["psql" ~@(format-conn c) ~@(format-opts opts) "--command" ~command])
           p       (-> (pr/process command (merge
                                            {:extra-env {:PGPASSWORD (:pass c)}}
@@ -148,7 +148,7 @@
     (dump-schema (-> params
                      (assoc :to file)))
     (log/info "Applying schema...")
-    (psql-eval {:conn to :file file})))
+    (psql-eval {:conn to :file file :opts [:quiet]})))
 
 (defn- table-exists? [{:keys [conn table]}]
   (-> (psql-eval {:conn conn :capture true
@@ -161,24 +161,33 @@
 (defn- glob-tables [{:keys [conn pattern]}]
   (-> (psql-eval {:conn conn :capture true
                   :opts [:quiet :tuples-only :no-align :no-psqlrc]
-                  :command (str "select json_agg(table_name) from information_schema.tables where table_name like '" pattern "';")})))
+                  :command (str "select json_agg(table_name) from information_schema.tables where table_name like '" pattern "';")})
+      json/parse-string
+      sort))
 
 ;; bb copy-data --conn bsq-eu-prod --to bsq-local --truncate --table foo
-(defn copy-data [{:keys [conn to table query truncate]}]
-  (let [file (temp-file)]
-    (log/infof "Copying data from %s to temp file %s" (or query table) file)
-    (copy (merge {:conn conn :to file}
-                 (if query
-                   {:query query}
-                   {:table table})))
+;; bb copy-data --conn bsq-eu-prod --to bsq-local --truncate --pattern 'foo%'
+(defn copy-data [{:keys [conn to table pattern query truncate]}]
+  (if pattern
+    (let [tables (glob-tables {:conn conn :pattern pattern})]
+      (if (empty? tables)
+        (log/errorf "Did not find any tables matching %s" pattern)
+        (doseq [table tables]
+          (copy-data {:conn conn :to to :table table :truncate truncate}))))
+    (let [file (temp-file)]
+      (log/infof "Copying data from %s to temp file %s" (or query table) file)
+      (copy (merge {:conn conn :to file}
+                   (if query
+                     {:query query}
+                     {:table table})))
 
-    (if (table-exists? {:conn to :table table})
-      (when truncate
-        (log/infof "Table %s exists in destination database, truncating..." table)
-        (psql-eval {:conn to :command (str "truncate table " table)}))
-      (do
-        (log/infof "Table %s does not exist in destination database, copying schema..." table)
-        (copy-schema {:conn conn :to to :table table})))
+      (if (table-exists? {:conn to :table table})
+        (when truncate
+          (log/infof "Table %s exists in destination database, truncating..." table)
+          (psql-eval {:conn to :opts [:quiet] :command (str "truncate table " table)}))
+        (do
+          (log/infof "Table %s does not exist in destination database, copying schema..." table)
+          (copy-schema {:conn conn :to to :table table})))
 
-    (log/infof "Copying data from temp file %s to table %s" file table)
-    (copy {:conn to :from-csv file :table table})))
+      (log/infof "Copying data from temp file %s to table %s" file table)
+      (copy {:conn to :from-csv file :table table}))))
