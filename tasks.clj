@@ -23,7 +23,7 @@
    "--username" user
    "--port" (str port)])
 
-;; bb psql-prompt --conn bsq-local
+;; bb psql-prompt --conn local
 
 (defn psql-prompt [{:keys [conn] :as params}]
   (let [config (load-config)
@@ -35,7 +35,7 @@
 (defn- psql-command [conn command]
   `["psql" ~@(format-conn conn) "--command" ~command])
 
-;; bb psql-command --conn bsq-local
+;; bb psql-command --conn local
 
 (defn psql-command* [{:keys [conn]}]
   (let [config (load-config)
@@ -44,9 +44,9 @@
     (let [command (psql-command c "")]
       (println (string/join " " command)))))
 
-;; bb copy --conn bsq-eu-test --to data --query 'select * from sonygwt_aa_webkpi_eu__extract limit 10'
-;; bb copy --conn bsq-local --to data --table continental_ga_standard_global__cluster_sessions_h
-;; bb copy --conn bsq-eu-test --to data --query "select * from sonygwt_aa_webkpi_eu__extract where collection_date > now() - '2 days'::interval"
+;; bb copy --conn eu-test --to data --query 'select * from foo limit 10'
+;; bb copy --conn local --to data --table foo
+;; bb copy --conn eu-test --to data --query "select * from foo where collection_date > now() - '2 days'::interval"
 
 (defn copy [{:keys [conn to file table query from-csv]}]
   (let [config (load-config)
@@ -62,7 +62,8 @@
       (-> (pr/process command {:extra-env {:PGPASSWORD (:pass c)}})
           (pr/check)))))
 
-;; bb dump --conn bsq-local --to clusters.sql --table continental_ga_standard_global__cluster_sessions_h
+;; bb dump --conn local --to clusters.sql --table foo
+
 (defn dump [{:keys [conn to table schema] :as params}]
   (let [config (load-config)
         c      (get-in config [:connections (keyword conn)])]
@@ -82,11 +83,10 @@
         (-> p :out slurp println))
       p)))
 
-;; bb dump-schema --conn bsq-local --to schema.sql --schema public
-;; bb dump-schema --conn bsq-local --to schema.sql --table continental_ga_standard_global__cluster_sessions_h
-;; bb dump-schema --conn bsq-local --to schema.sql --table 'continental_ga_standard_global__*'
-;; bb dump-schema --conn bsq-local --to schema.sql
-;; bb dump-schema --conn bsq-eu-test --to schema.sql --table 'domes_ga_me_eu__*'
+;; bb dump-schema --conn local --to schema.sql --schema public
+;; bb dump-schema --conn local --to schema.sql --table foo
+;; bb dump-schema --conn local --to schema.sql --table 'foo__*'
+;; bb dump-schema --conn local --to schema.sql
 
 (defn dump-schema [{:keys [conn to table schema] :as params}]
   (let [config (load-config)
@@ -108,8 +108,8 @@
         (-> p :out slurp println))
       p)))
 
-;; bb eval --conn bsq-local --command 'select * from www1800contacts_aav2_ca_us_app__extract'
-;; bb eval --conn bsq-local --file schema.sql
+;; bb eval --conn local --command 'select * from foo'
+;; bb eval --conn local --file schema.sql
 
 (defn- format-opts [{:keys [quiet tuples-only no-align no-psqlrc] :as opts}]
   (->> opts
@@ -140,8 +140,7 @@
 (defn- temp-file []
   (str (fs/absolutize (fs/create-temp-file))))
 
-;; bb copy-schema --conn bsq-eu-test --to bsq-local --table baresquare_ga_custom_011lt__full_ticket
-;; bb copy-schema --conn bsq-eu-test --to bsq-local --table 'domes_ga_me_eu__*'
+;; bb copy-schema --conn eu-test --to local --table foo
 
 (defn copy-schema [{:keys [conn to table schema] :as params}]
   (let [file (temp-file)]
@@ -166,8 +165,8 @@
       json/parse-string
       sort))
 
-;; bb copy-data --conn bsq-eu-prod --to bsq-local --truncate --table foo
-;; bb copy-data --conn bsq-eu-prod --to bsq-local --truncate --table-pattern 'foo%'
+;; bb copy-data --conn eu-prod --to local --truncate --table foo
+;; bb copy-data --conn eu-prod --to local --truncate --table-pattern 'foo%'
 
 (defn copy-data [{:keys [conn to table table-pattern query query-template truncate drop]}]
   (if table-pattern
