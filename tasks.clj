@@ -167,6 +167,7 @@
 
 ;; bb copy-data --conn eu-prod --to local --truncate --table foo
 ;; bb copy-data --conn eu-prod --to local --truncate --table-pattern 'foo%'
+;; bb copy-data --conn eu-prod --to local --truncate --table-pattern 'foo%' --query-template "select * from {{table}} where date='2023-02-11'"
 
 (defn copy-data [{:keys [conn to table table-pattern query query-template truncate drop]}]
   (if table-pattern
