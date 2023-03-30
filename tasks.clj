@@ -6,6 +6,7 @@
             [babashka.tasks :as tasks]
             [babashka.process :as pr]
             [cheshire.core :as json]
+            [selmer.parser :as template]
             [clojure.tools.logging.readable :as log]))
 
 (defn- exit [ret]
@@ -148,7 +149,7 @@
     (dump-schema (-> params
                      (assoc :to file)))
     (log/info "Applying schema...")
-    (psql-eval {:conn to :file file :opts [:quiet]})))
+    (psql-eval {:conn to :file file :opts [:quiet :tuples-only :no-align :no-psqlrc]})))
 
 (defn- table-exists? [{:keys [conn table]}]
   (-> (psql-eval {:conn conn :capture true
@@ -167,13 +168,19 @@
 
 ;; bb copy-data --conn bsq-eu-prod --to bsq-local --truncate --table foo
 ;; bb copy-data --conn bsq-eu-prod --to bsq-local --truncate --table-pattern 'foo%'
-(defn copy-data [{:keys [conn to table table-pattern query truncate drop]}]
+
+(defn copy-data [{:keys [conn to table table-pattern query query-template truncate drop]}]
   (if table-pattern
     (let [tables (glob-tables {:conn conn :pattern table-pattern})]
       (if (empty? tables)
         (log/errorf "Did not find any tables matching %s" table-pattern)
-        (doseq [table tables]
-          (copy-data {:conn conn :to to :table table :truncate truncate}))))
+        (do
+          (log/infof "Matched %s tables: %s" (count tables) tables)
+          (doseq [table tables]
+            (if query-template
+              (copy-data {:conn conn :to to :table table :truncate truncate
+                          :query (template/render query-template {:table table})})
+              (copy-data {:conn conn :to to :table table :truncate truncate}))))))
     (let [file (temp-file)]
       (log/infof "Copying data from %s to temp file %s" (or query table) file)
       (copy (merge {:conn conn :to file}
