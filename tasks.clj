@@ -10,6 +10,21 @@
             [clojure.math :refer [floor round log pow]]
             [clojure.tools.logging :as log]))
 
+
+;; put the following in ~/.pgco/config.edn
+;;
+;; {:connections {:db-local  {:host "localhost"
+;;                            :user "user"
+;;                            :pass "pass"
+;;                            :db   "db name"
+;;                            :port 5430}
+;;                :db-remote {:host "remote.host"
+;;                            :user "user"
+;;                            :pass "pass"
+;;                            :db   "dn name"
+;;                            :port 5432}}}
+
+
 (defn- exit [ret]
   (System/exit ret))
 
