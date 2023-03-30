@@ -166,12 +166,12 @@
       sort))
 
 ;; bb copy-data --conn bsq-eu-prod --to bsq-local --truncate --table foo
-;; bb copy-data --conn bsq-eu-prod --to bsq-local --truncate --pattern 'foo%'
-(defn copy-data [{:keys [conn to table pattern query truncate]}]
-  (if pattern
-    (let [tables (glob-tables {:conn conn :pattern pattern})]
+;; bb copy-data --conn bsq-eu-prod --to bsq-local --truncate --table-pattern 'foo%'
+(defn copy-data [{:keys [conn to table table-pattern query truncate drop]}]
+  (if table-pattern
+    (let [tables (glob-tables {:conn conn :pattern table-pattern})]
       (if (empty? tables)
-        (log/errorf "Did not find any tables matching %s" pattern)
+        (log/errorf "Did not find any tables matching %s" table-pattern)
         (doseq [table tables]
           (copy-data {:conn conn :to to :table table :truncate truncate}))))
     (let [file (temp-file)]
@@ -182,9 +182,19 @@
                      {:table table})))
 
       (if (table-exists? {:conn to :table table})
-        (when truncate
-          (log/infof "Table %s exists in destination database, truncating..." table)
-          (psql-eval {:conn to :opts [:quiet] :command (str "truncate table " table)}))
+        (cond
+          drop
+          (do
+            (log/infof "Table %s exists in destination database, dropping..." table)
+            (psql-eval {:conn to :opts [:quiet] :command (str "drop table " table)}))
+
+          truncate
+          (do
+            (log/infof "Table %s exists in destination database, truncating..." table)
+            (psql-eval {:conn to :opts [:quiet] :command (str "truncate table " table)}))
+
+          :else
+          (log/infof "Table %s exists in destination database, will append data to it..." table))
         (do
           (log/infof "Table %s does not exist in destination database, copying schema..." table)
           (copy-schema {:conn conn :to to :table table})))
