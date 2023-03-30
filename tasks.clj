@@ -226,7 +226,7 @@
       (if (empty? tables)
         (log/errorf "Did not find any tables matching %s" table-pattern)
         (do
-          (log/infof "Matched %d tables: %s" (count tables) (string/join "," tables))
+          (log/infof "Matched %d tables: %s" (count tables) (string/join ", " tables))
           (doseq [table tables]
             (if query-template
               (copy-data {:conn conn :to to :table table :truncate truncate
