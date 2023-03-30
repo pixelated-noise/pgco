@@ -7,7 +7,8 @@
             [babashka.process :as pr]
             [cheshire.core :as json]
             [selmer.parser :as template]
-            [clojure.tools.logging.readable :as log]))
+            [clojure.math :refer [floor round log pow]]
+            [clojure.tools.logging :as log]))
 
 (defn- exit [ret]
   (System/exit ret))
@@ -28,7 +29,7 @@
 (defn psql-prompt [{:keys [conn] :as params}]
   (let [config (load-config)
         c      (get-in config [:connections (keyword conn)])]
-    (when-not c (log/fatalf "Connection %s not found" conn) (exit 1))
+    (when-not c (log/error "Connection" conn "not found") (exit 1))
     (let [command (string/join " " `["psql" ~@(format-conn c)])]
       (tasks/shell {:extra-env {:PGPASSWORD (:pass c)}} command))))
 
@@ -40,7 +41,7 @@
 (defn psql-command* [{:keys [conn]}]
   (let [config (load-config)
         c      (get-in config [:connections (keyword conn)])]
-    (when-not c (log/fatalf "Connection %s not found" conn) (exit 1))
+    (when-not c (log/error "Connection " conn " not found") (exit 1))
     (let [command (psql-command c "")]
       (println (string/join " " command)))))
 
@@ -51,7 +52,7 @@
 (defn copy [{:keys [conn to file table query from-csv]}]
   (let [config (load-config)
         c      (get-in config [:connections (keyword conn)])]
-    (when-not c (log/fatalf "Connection %s not found" conn) (exit 1))
+    (when-not c (log/error "Connection" conn " not found") (exit 1))
     (let [command (psql-command
                    c (cond
                        from-csv (format "\\copy %s from %s" table from-csv) ;;(format "\\copy %s from %s with (delimiter E'\\t', format csv)" table from-csv)
@@ -67,7 +68,7 @@
 (defn dump [{:keys [conn to table schema] :as params}]
   (let [config (load-config)
         c      (get-in config [:connections (keyword conn)])]
-    (when-not c (log/fatalf "Connection %s not found" conn) (exit 1))
+    (when-not c (log/error "Connection" conn "not found") (exit 1))
     (let [command `["pg_dump"
                     ~@(format-conn c)
                     ~@(cond
@@ -91,7 +92,7 @@
 (defn dump-schema [{:keys [conn to table schema] :as params}]
   (let [config (load-config)
         c      (get-in config [:connections (keyword conn)])]
-    (when-not c (log/fatalf "Connection %s not found" conn) (exit 1))
+    (when-not c (log/error "Connection" conn "not found") (exit 1))
     (let [command `["pg_dump"
                     ~@(format-conn c)
                     ~@(cond
@@ -120,7 +121,7 @@
   ;;(prn params)
   (let [config (load-config)
         c      (get-in config [:connections (keyword conn)])]
-    (when-not c (log/fatalf "Connection %s not found" conn) (exit 1))
+    (when-not c (log/error "Connection" conn "not found") (exit 1))
     (let [command (cond
                     file    `["psql" ~@(format-conn c) ~@(format-opts opts) "--file" ~file]
                     command `["psql" ~@(format-conn c) ~@(format-opts opts) "--command" ~command])
@@ -165,6 +166,41 @@
       json/parse-string
       sort))
 
+(defn- logn [num base]
+  (/ (round (log num))
+     (round (log base))))
+
+(defn- human-filesize
+  "Format a number of bytes as a human readable filesize (eg. 10 kB). By
+   default, decimal suffixes (kB, MB) are used.  Passing :binary true will use
+   binary suffixes (KiB, MiB) instead.
+
+  Adapted from https://github.com/clj-commons/humanize"
+  [bytes & {:keys [binary fmt]
+            :or   {binary false
+                   fmt "%.1f"}}]
+
+  (if (zero? bytes)
+    ;; special case for zero
+    "0 bytes"
+    (let [decimal-sizes [:B, :KB, :MB, :GB, :TB,
+                         :PB, :EB, :ZB, :YB]
+          binary-sizes  [:B, :KiB, :MiB, :GiB, :TiB,
+                         :PiB, :EiB, :ZiB, :YiB]
+
+          units         (if binary binary-sizes decimal-sizes)
+          base          (if binary 1024 1000)
+
+          base-pow      (int (floor (logn bytes base)))
+          ;; if base power shouldn't be larger than biggest unit
+          base-pow      (if (< base-pow (count units))
+                          base-pow
+                          (dec (count units)))
+          suffix        (name (get units base-pow))
+          value         (float (/ bytes (pow base base-pow)))]
+
+      (str (format fmt value) suffix))))
+
 ;; bb copy-data --conn eu-prod --to local --truncate --table foo
 ;; bb copy-data --conn eu-prod --to local --truncate --table-pattern 'foo%'
 ;; bb copy-data --conn eu-prod --to local --truncate --table-pattern 'foo%' --query-template "select * from {{table}} where date='2023-02-11'"
@@ -175,7 +211,7 @@
       (if (empty? tables)
         (log/errorf "Did not find any tables matching %s" table-pattern)
         (do
-          (log/infof "Matched %s tables: %s" (count tables) tables)
+          (log/infof "Matched %d tables: %s" (count tables) (string/join "," tables))
           (doseq [table tables]
             (if query-template
               (copy-data {:conn conn :to to :table table :truncate truncate
@@ -206,5 +242,5 @@
           (log/infof "Table %s does not exist in destination database, copying schema..." table)
           (copy-schema {:conn conn :to to :table table})))
 
-      (log/infof "Copying data from temp file %s to table %s" file table)
+      (log/infof "Copying data from temp file %s (%s) to table %s" file (human-filesize (fs/size file)) table)
       (copy {:conn to :from-csv file :table table}))))
