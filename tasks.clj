@@ -148,7 +148,9 @@
       (when (and (not to) (not capture))
         (-> p :out slurp println))
       (if capture
-        (-> p :out slurp)
+        (let [output (-> p :out slurp)]
+          (pr/check p)
+          output)
         (do
           (pr/check p)
           p)))))
@@ -164,7 +166,7 @@
     (dump-schema (-> params
                      (assoc :to file)))
     (log/info "Applying schema...")
-    (psql-eval {:conn to :file file :opts [:quiet :tuples-only :no-align :no-psqlrc]})))
+    (psql-eval {:conn to :file file :capture true :opts [:quiet :tuples-only :no-align :no-psqlrc]})))
 
 (defn- table-exists? [{:keys [conn table]}]
   (-> (psql-eval {:conn conn :capture true
